@@ -1,0 +1,186 @@
+CREATE TABLE Nashvile_Housing_Data(
+  UniqueID INT,	ParcelID VARCHAR,
+    LandUse VARCHAR,	PropertyAddress VARCHAR,	SaleDate DATE,	SalePrice	VARCHAR, LegalReference VARCHAR,	SoldAsVacant varchar(3),	OwnerName VARCHAR,	OwnerAddress VARCHAR,	Acreage REAL,	TaxDistrict VARCHAR,	LandValue INT,	BuildingValue INT,	TotalValue INT,	YearBuilt VARCHAR,	Bedrooms INT,	FullBath INT,	HalfBath INT  
+);
+
+
+
+
+copy Nashvile_Housing_Data
+FROM 'C:\Users\ASUS\Desktop\Nashville_Housing_Data.csv'
+WITH (FORMAT CSV, HEADER);
+
+
+
+
+
+
+SELECT *
+FROM Nashvile_housing_data;
+
+SELECT propertyaddress
+FROM Nashvile_housing_data
+WHERE propertyaddress IS NULL;
+
+Select *
+From Nashvile_Housing_Data
+--Where PropertyAddress is null
+order by ParcelID;
+
+
+
+SELECT a.uniqueid, a.parcelid, a.PropertyAddress, b.uniqueid, b.parcelid, b.PropertyAddress, COALESCE(a.PropertyAddress,b.PropertyAddress)
+From Nashvile_Housing_Data a
+JOIN Nashvile_Housing_Data b
+	on a.ParcelID = b.ParcelID
+	AND a.UniqueID <> b.UniqueID;
+--Where a.PropertyAddress is null;
+
+
+
+-- FIlling Missing propertyaddress
+
+
+
+
+
+CREATE TEMP TABLE prop_add(parcelid VARCHAR, address VARCHAR);
+
+
+INSERT INTO prop_add (parcelid, address) 
+SELECT DISTINCT a.parcelid, COALESCE(a.PropertyAddress,b.PropertyAddress)
+From Nashvile_Housing_Data a
+JOIN Nashvile_Housing_Data b
+	on a.ParcelID = b.ParcelID
+	AND a.UniqueID <> b.UniqueID
+Where a.PropertyAddress is null;
+
+
+
+
+UPDATE Nashvile_Housing_Data
+SET propertyaddress = prop_add.address
+FROM prop_add
+WHERE Nashvile_Housing_Data.parcelid = prop_add.parcelid;
+
+
+DROP TABLE prop_add
+
+
+
+
+-- Breaking Address into separate columns
+
+SELECT propertyaddress
+FROM Nashvile_Housing_Data
+WHERE propertyaddress ILIKE '%,%';
+
+
+
+SELECT
+SUBSTRING( propertyaddress, 1, POSITION(',' IN propertyaddress)-1) as Address,
+SUBSTRING( propertyaddress, POSITION(',' IN propertyaddress)+1, LENGTH(propertyaddress)) as CITY
+FROM Nashvile_Housing_Data;
+
+
+/*
+
+ALTER TABLE Nashvile_Housing_Data
+ADD Property_Address VARCHAR;
+
+UPDATE Nashvile_Housing_Data
+SET  Property_Address = SUBSTRING( propertyaddress, 1, POSITION(',' IN propertyaddress)-1);
+
+
+ALTER TABLE Nashvile_Housing_Data
+ADD Property_CITY VARCHAR;
+
+UPDATE Nashvile_Housing_Data
+SET  Property_CITY = SUBSTRING( propertyaddress, POSITION(',' IN propertyaddress)+1, LENGTH(propertyaddress));
+
+*/
+
+SELECT *
+FROM Nashvile_Housing_Data;
+
+
+
+--Breaking Owner Address into separate columns
+
+SELECT OwnerAddress
+FROM Nashvile_Housing_Data;
+
+
+SELECT
+SPLIT_PART(OwnerAddress, ',', 1),
+SPLIT_PART(OwnerAddress, ',', 2),
+SPLIT_PART(OwnerAddress, ',', 3)
+FROM Nashvile_Housing_Data;
+
+/*
+
+ALTER TABLE Nashvile_Housing_Data
+ADD Owner_Address VARCHAR;
+
+UPDATE Nashvile_Housing_Data
+SET  Owner_Address = SPLIT_PART(OwnerAddress, ',', 1);
+
+
+ALTER TABLE Nashvile_Housing_Data
+ADD Owner_Address_City VARCHAR;
+
+UPDATE Nashvile_Housing_Data
+SET  Owner_Address_City = SPLIT_PART(OwnerAddress, ',', 2);
+
+
+ALTER TABLE Nashvile_Housing_Data
+ADD Owner_Address_State VARCHAR;
+
+UPDATE Nashvile_Housing_Data
+SET  Owner_Address_State = SPLIT_PART(OwnerAddress, ',', 3);
+
+
+*/
+
+
+SELECT *
+FROM Nashvile_Housing_Data
+WHERE Owner_Address_State IS NOT NULL;
+
+
+
+-- Remove Duplicates
+
+WITH RowNumCTE AS(
+SELECT *,
+    ROW_NUMBER() OVER(
+    PARTITION BY parcelID,
+                 propertyaddress,
+                 SalePrice,
+                 SaleDate,
+                 LegalReference
+                 ORDER BY
+                    UNIQUEID
+                        ) row_num
+                        
+    FROM Nashvile_Housing_Data
+    --ORDER BY ParcelID
+    )
+SELECT *
+FROM RowNumCTE
+WHERE row_num > 1
+ORDER BY propertyaddress;
+    
+
+
+
+DELETE FROM
+    Nashvile_Housing_Data a
+        USING Nashvile_Housing_Data b
+WHERE
+    a.ctid < b.ctid
+    AND a.parcelID = b.parcelID
+    AND a.propertyaddress = b.propertyaddress
+    AND a.SalePrice = b.SalePrice
+    AND a.SaleDate = b.SaleDate
+    AND a.LegalReference = b.LegalReference;
